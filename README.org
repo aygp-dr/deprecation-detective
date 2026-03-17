@@ -1,0 +1,148 @@
+#+TITLE: DeprecationDetective
+#+AUTHOR: aygp-dr
+#+OPTIONS: toc:2
+
+[[https://github.com/aygp-dr/deprecation-detective/actions/workflows/ci.yml][https://github.com/aygp-dr/deprecation-detective/actions/workflows/ci.yml/badge.svg]]
+
+* Description
+
+DeprecationDetective is a babashka CLI tool that scans codebases for deprecated APIs, libraries, and patterns. It identifies outdated usage across multiple languages and suggests modern alternatives.
+
+* Install
+
+** Requirements
+
+- [[https://github.com/babashka/babashka][Babashka]] v1.12+
+
+** Clone
+
+#+begin_src bash
+git clone https://github.com/aygp-dr/deprecation-detective.git
+cd deprecation-detective
+#+end_src
+
+* Usage
+
+#+begin_src bash
+# Scan current directory (text output)
+bb run -- --dir .
+
+# Scan with JSON output
+bb run -- --dir ./my-project --format json
+
+# Show only high-severity findings
+bb run -- --dir ./my-project --severity high
+
+# Show help
+bb run -- --help
+#+end_src
+
+Or via Makefile:
+
+#+begin_src bash
+make run          # Scan current directory
+make scan-json    # JSON output
+make scan-high    # High severity only
+#+end_src
+
+** CLI Options
+
+| Flag              | Description                          | Default |
+|-------------------+--------------------------------------+---------|
+| =-d=, =--dir=    | Directory to scan                    | =.=     |
+| =-f=, =--format= | Output format: text, json, edn       | =text=  |
+| =-s=, =--severity= | Minimum severity: low, medium, high | =low=   |
+| =-h=, =--help=   | Show help                            |         |
+
+* Supported Patterns
+
+| ID                     | Language   | Severity | What it detects                          | Replacement                            |
+|------------------------+------------+----------+------------------------------------------+----------------------------------------|
+| =py-distutils=         | Python     | high     | =from distutils= imports                 | setuptools                             |
+| =py-imp=               | Python     | high     | =import imp= module                      | importlib                              |
+| =py-optparse=          | Python     | medium   | =import optparse= module                 | argparse                               |
+| =py-cgi=               | Python     | medium   | =import cgi= module                      | urllib.parse                            |
+| =py-unittest-makesuite= | Python   | medium   | =unittest.makeSuite= usage               | unittest.TestLoader.loadTestsFromTestCase |
+| =js-var=               | JavaScript | low      | =var= declarations                       | let/const                              |
+| =js-arguments=         | JavaScript | low      | =arguments= object usage                 | ...args (rest parameters)              |
+| =node-domain=          | JavaScript | high     | =require('domain')= usage                | async_hooks                            |
+| =java-date=            | Java       | medium   | =new Date()= constructor                 | java.time.Instant.now()                |
+| =go-ioutil=            | Go         | high     | =io/ioutil= package import               | io, os                                 |
+
+* Exit Codes
+
+| Code | Meaning                              |
+|------+--------------------------------------|
+|    0 | No deprecations found                |
+|    1 | Deprecations found (check output)    |
+|    2 | Error (invalid arguments, etc.)      |
+
+* Output Formats
+
+** Text (default)
+
+#+begin_example
+Found 3 deprecation(s):
+
+  src/main.py:12 [HIGH] distutils is deprecated since Python 3.10, use setuptools
+    -> Replace with: setuptools
+    |  from distutils.core import setup
+
+Summary: 2 high, 1 medium, 0 low
+#+end_example
+
+** JSON (=--format json=)
+
+#+begin_src json
+{
+  "total": 3,
+  "by-severity": {"high": 2, "medium": 1, "low": 0},
+  "findings": [...]
+}
+#+end_src
+
+** EDN (=--format edn=)
+
+Returns findings as a Clojure EDN data structure.
+
+* Development
+
+** Make Targets
+
+| Target       | Description                     |
+|--------------+---------------------------------|
+| =make help=  | Show available targets          |
+| =make run=   | Run scanner on current directory |
+| =make test=  | Run all tests                   |
+| =make lint=  | Check for style issues          |
+| =make clean= | Clean generated files           |
+| =make scan-json= | Scan with JSON output       |
+| =make scan-high= | Scan for high severity only |
+
+** Running Tests
+
+#+begin_src bash
+make test
+# or directly:
+bb -cp src:test -m deprecation-detective.core-test
+#+end_src
+
+** Adding Patterns
+
+Edit =src/deprecation_detective/core.clj= and add entries to the =deprecation-patterns= vector. Each pattern requires:
+
+- =:id= -- unique identifier (e.g., =py-distutils=)
+- =:lang= -- language name (must match =ext->lang= values)
+- =:pattern= -- regex to match deprecated usage
+- =:message= -- human-readable description
+- =:severity= -- one of =high=, =medium=, =low=
+- =:replacement= -- suggested modern alternative
+
+* CI
+
+GitHub Actions runs on every push and pull request:
+
+- =make test= -- runs the full test suite (21 tests, 100+ assertions)
+- =make run= -- verifies the scanner executes cleanly
+
+See =.github/workflows/ci.yml= for the pipeline definition.
