@@ -5,7 +5,7 @@
             [clojure.spec.gen.alpha :as gen]
             [clojure.string :as str]))
 
-(def ^:private gen-non-blank (gen/not-empty (gen/string-alphanumeric)))
+(defn- gen-non-blank [] (gen/not-empty (gen/string-alphanumeric)))
 
 ;; --- Shared vocabulary ---
 
@@ -13,24 +13,24 @@
 (s/def ::severity #{"high" "medium" "low"})
 
 ;; A relative or absolute file path, as a string or java.nio.file.Path.
-(def ^:private gen-path-string
+(defn- gen-path-string []
   (gen/fmap (fn [[dirs base ext]]
               (str/join "/" (conj dirs (cond-> base ext (str "." ext)))))
-            (gen/tuple (gen/vector gen-non-blank 0 3)
-                       gen-non-blank
+            (gen/tuple (gen/vector (gen-non-blank) 0 3)
+                       (gen-non-blank)
                        (gen/one-of [(gen/return nil)
                                     (gen/elements ["py" "js" "ts" "go" "java" "rb" "clj" "txt"])
                                     (gen/string-alphanumeric)]))))
 
-(s/def ::path-string (s/with-gen (s/and string? seq) (constantly gen-path-string)))
+(s/def ::path-string (s/with-gen (s/and string? seq) gen-path-string))
 (s/def ::path-like
   (s/with-gen (s/or :string ::path-string
                     :path #(instance? java.nio.file.Path %))
-    (constantly gen-path-string)))
+    gen-path-string))
 
 ;; --- Pattern database (deprecation-detective.core/deprecation-patterns) ---
 
-(s/def ::id (s/with-gen (s/and string? (complement str/blank?)) (constantly gen-non-blank)))
+(s/def ::id (s/with-gen (s/and string? (complement str/blank?)) gen-non-blank))
 (s/def ::pattern
   (s/with-gen #(instance? java.util.regex.Pattern %)
     #(gen/fmap re-pattern (gen/elements ["(?i)import\\s+imp\\b" "\\bvar\\s+"
