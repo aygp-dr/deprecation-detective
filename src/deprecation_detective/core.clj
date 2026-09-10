@@ -2,8 +2,10 @@
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [cheshire.core :as json]))
+            [cheshire.core :as json]
+            [deprecation-detective.specs :as specs]))
 
 ;; Deprecated pattern database
 (def deprecation-patterns
@@ -73,6 +75,13 @@
     (when-let [idx (str/last-index-of name ".")]
       (subs name (inc idx)))))
 
+(s/fdef file-extension
+  :args (s/cat :path ::specs/path-like)
+  :ret (s/nilable string?)
+  :fn (fn [{{[_ path] :path} :args ret :ret}]
+        (or (nil? ret)
+            (str/ends-with? (str (fs/file-name path)) (str "." ret)))))
+
 (def ext->lang
   {"py" "python" "pyw" "python"
    "js" "javascript" "mjs" "javascript" "cjs" "javascript" "ts" "javascript"
@@ -101,6 +110,10 @@
                                   :replacement (:replacement pattern)
                                   :match (str/trim line)})))))))))
 
+(s/fdef scan-file
+  :args (s/cat :path ::specs/path-like)
+  :ret (s/nilable ::specs/findings))
+
 (defn scan-directory [dir opts]
   (let [extensions (set (keys ext->lang))
         files (->> (fs/glob dir "**")
@@ -113,30 +126,48 @@
          (mapcat scan-file)
          (sort-by (juxt :severity :file :line)))))
 
+(s/fdef scan-directory
+  :args (s/cat :dir ::specs/path-like :opts (s/nilable ::specs/cli-opts))
+  :ret ::specs/findings)
+
 (defn format-text [findings]
   (if (empty? findings)
     "No deprecations found."
     (str/join "\n"
-      (concat
-        [(format "Found %d deprecation(s):\n" (count findings))]
-        (map (fn [{:keys [file line severity message replacement match]}]
-               (format "  %s:%d [%s] %s\n    -> Replace with: %s\n    |  %s"
-                       file line (str/upper-case severity) message replacement match))
-             findings)
-        [""
-         (format "Summary: %d high, %d medium, %d low"
-                 (count (filter #(= (:severity %) "high") findings))
-                 (count (filter #(= (:severity %) "medium") findings))
-                 (count (filter #(= (:severity %) "low") findings)))]))))
+              (concat
+               [(format "Found %d deprecation(s):\n" (count findings))]
+               (map (fn [{:keys [file line severity message replacement match]}]
+                      (format "  %s:%d [%s] %s\n    -> Replace with: %s\n    |  %s"
+                              file line (str/upper-case severity) message replacement match))
+                    findings)
+               [""
+                (format "Summary: %d high, %d medium, %d low"
+                        (count (filter #(= (:severity %) "high") findings))
+                        (count (filter #(= (:severity %) "medium") findings))
+                        (count (filter #(= (:severity %) "low") findings)))]))))
+
+(s/fdef format-text
+  :args (s/cat :findings ::specs/findings)
+  :ret string?
+  :fn (fn [{{:keys [findings]} :args ret :ret}]
+        (if (empty? findings)
+          (= "No deprecations found." ret)
+          (str/starts-with? ret (format "Found %d deprecation(s):" (count findings))))))
 
 (defn format-json [findings]
   (json/generate-string
-    {:total (count findings)
-     :by-severity {:high (count (filter #(= (:severity %) "high") findings))
-                   :medium (count (filter #(= (:severity %) "medium") findings))
-                   :low (count (filter #(= (:severity %) "low") findings))}
-     :findings findings}
-    {:pretty true}))
+   {:total (count findings)
+    :by-severity {:high (count (filter #(= (:severity %) "high") findings))
+                  :medium (count (filter #(= (:severity %) "medium") findings))
+                  :low (count (filter #(= (:severity %) "low") findings))}
+    :findings findings}
+   {:pretty true}))
+
+(s/fdef format-json
+  :args (s/cat :findings ::specs/findings)
+  :ret string?
+  :fn (fn [{{:keys [findings]} :args ret :ret}]
+        (= (count findings) (get (json/parse-string ret) "total"))))
 
 (def cli-spec
   {:dir {:desc "Directory to scan"
@@ -164,11 +195,14 @@
         findings (->> (scan-directory (:dir opts) opts)
                       (filter #(>= (get severity-rank (:severity %) 0) min-severity)))]
     (println
-      (case (:format opts)
-        "json" (format-json findings)
-        "edn" (pr-str findings)
-        (format-text findings)))
+     (case (:format opts)
+       "json" (format-json findings)
+       "edn" (pr-str findings)
+       (format-text findings)))
     (System/exit (if (seq findings) 1 0))))
+
+(s/fdef -main
+  :args (s/* string?))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))
