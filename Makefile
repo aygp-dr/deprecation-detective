@@ -1,4 +1,4 @@
-.PHONY: run test lint clean help scan-json scan-high
+.PHONY: run test lint fmt check clean help scan-json scan-high
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -6,14 +6,20 @@ help: ## Show this help
 run: ## Run the scanner on current directory
 	bb run --dir . --format text
 
-test: ## Run all tests
-	bb -cp src:test -m deprecation-detective.core-test
+test: ## Run all tests (JVM + babashka)
+	bb test && bb test:bb
 
-lint: ## Check for style issues
-	bb -e '(println "Lint OK - bb scripts are self-contained")'
+lint: ## Lint with clj-kondo
+	bb lint
+
+fmt: ## Check formatting (bb fmt:fix to repair)
+	bb fmt
+
+check: ## lint + fmt + test (what CI runs)
+	bb check
 
 clean: ## Clean generated files
-	rm -rf .cpcache target
+	rm -rf .cpcache target .clj-kondo/.cache
 
 scan-json: ## Scan current dir, JSON output
 	bb run --dir . --format json
