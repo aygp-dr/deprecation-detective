@@ -117,26 +117,26 @@
   (if (empty? findings)
     "No deprecations found."
     (str/join "\n"
-      (concat
-        [(format "Found %d deprecation(s):\n" (count findings))]
-        (map (fn [{:keys [file line severity message replacement match]}]
-               (format "  %s:%d [%s] %s\n    -> Replace with: %s\n    |  %s"
-                       file line (str/upper-case severity) message replacement match))
-             findings)
-        [""
-         (format "Summary: %d high, %d medium, %d low"
-                 (count (filter #(= (:severity %) "high") findings))
-                 (count (filter #(= (:severity %) "medium") findings))
-                 (count (filter #(= (:severity %) "low") findings)))]))))
+              (concat
+               [(format "Found %d deprecation(s):\n" (count findings))]
+               (map (fn [{:keys [file line severity message replacement match]}]
+                      (format "  %s:%d [%s] %s\n    -> Replace with: %s\n    |  %s"
+                              file line (str/upper-case severity) message replacement match))
+                    findings)
+               [""
+                (format "Summary: %d high, %d medium, %d low"
+                        (count (filter #(= (:severity %) "high") findings))
+                        (count (filter #(= (:severity %) "medium") findings))
+                        (count (filter #(= (:severity %) "low") findings)))]))))
 
 (defn format-json [findings]
   (json/generate-string
-    {:total (count findings)
-     :by-severity {:high (count (filter #(= (:severity %) "high") findings))
-                   :medium (count (filter #(= (:severity %) "medium") findings))
-                   :low (count (filter #(= (:severity %) "low") findings))}
-     :findings findings}
-    {:pretty true}))
+   {:total (count findings)
+    :by-severity {:high (count (filter #(= (:severity %) "high") findings))
+                  :medium (count (filter #(= (:severity %) "medium") findings))
+                  :low (count (filter #(= (:severity %) "low") findings))}
+    :findings findings}
+   {:pretty true}))
 
 (def cli-spec
   {:dir {:desc "Directory to scan"
@@ -164,10 +164,10 @@
         findings (->> (scan-directory (:dir opts) opts)
                       (filter #(>= (get severity-rank (:severity %) 0) min-severity)))]
     (println
-      (case (:format opts)
-        "json" (format-json findings)
-        "edn" (pr-str findings)
-        (format-text findings)))
+     (case (:format opts)
+       "json" (format-json findings)
+       "edn" (pr-str findings)
+       (format-text findings)))
     (System/exit (if (seq findings) 1 0))))
 
 (when (= *file* (System/getProperty "babashka.file"))
